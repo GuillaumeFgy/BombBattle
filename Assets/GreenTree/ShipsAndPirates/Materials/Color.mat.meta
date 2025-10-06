@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: d48c80d3b5e1d2646b0613d809c59d88
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 2100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 288788
+  packageName: Ships And Pirates
+  packageVersion: 1.0
+  assetPath: Assets/GreenTree/ShipsAndPirates/Materials/Color.mat
+  uploadId: 683907

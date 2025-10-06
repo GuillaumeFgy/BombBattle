@@ -1,0 +1,18 @@
+fileFormatVersion: 2
+guid: 545568d0d04e8734e8c07535254b2262
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences: []
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 288788
+  packageName: Ships And Pirates
+  packageVersion: 1.0
+  assetPath: Assets/GreenTree/ShipsAndPirates/Scripts/CameraDepthTextureMode.cs
+  uploadId: 683907

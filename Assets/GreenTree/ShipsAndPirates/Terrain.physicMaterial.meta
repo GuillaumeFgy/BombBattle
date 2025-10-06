@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: 3d01de2e659bbde4f88988a0f2152a23
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 13400000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 288788
+  packageName: Ships And Pirates
+  packageVersion: 1.0
+  assetPath: Assets/GreenTree/ShipsAndPirates/Terrain.physicMaterial
+  uploadId: 683907

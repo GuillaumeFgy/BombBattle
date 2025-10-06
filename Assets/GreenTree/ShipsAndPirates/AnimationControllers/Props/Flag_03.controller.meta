@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: 8314b8837ad7439418b206574f309bd3
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 9100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 288788
+  packageName: Ships And Pirates
+  packageVersion: 1.0
+  assetPath: Assets/GreenTree/ShipsAndPirates/AnimationControllers/Props/Flag_03.controller
+  uploadId: 683907

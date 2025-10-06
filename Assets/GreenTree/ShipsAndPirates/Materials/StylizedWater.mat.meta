@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: e592835ac5178044e985b6c15bb64859
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 2100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 288788
+  packageName: Ships And Pirates
+  packageVersion: 1.0
+  assetPath: Assets/GreenTree/ShipsAndPirates/Materials/StylizedWater.mat
+  uploadId: 683907

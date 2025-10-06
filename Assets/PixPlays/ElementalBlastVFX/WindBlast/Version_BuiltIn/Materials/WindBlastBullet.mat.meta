@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: 0a1512e185741624eb38691eb20fd87a
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 2100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 297310
+  packageName: Elemental Blasts Spells Effects VFX
+  packageVersion: 1.0.0
+  assetPath: Assets/PixPlays/ElementalBlastVFX/WindBlast/Version_BuiltIn/Materials/WindBlastBullet.mat
+  uploadId: 699398

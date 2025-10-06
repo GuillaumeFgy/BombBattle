@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: 2f9330f276ad7df49b626341e93af9b1
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 2100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 264441
+  packageName: Elemental Projectiles VFX
+  packageVersion: 1.1.0
+  assetPath: Assets/PixPlays/ElementalProjectiles/Stonebullet/Version_BuiltIn/StonebulletProjectile/Materials/WindTrailsMat.mat
+  uploadId: 699399

@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: b312bc94c7eac5849833f30ed6b8d88e
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 2100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 264441
+  packageName: Elemental Projectiles VFX
+  packageVersion: 1.1.0
+  assetPath: Assets/PixPlays/ElementalProjectiles/Waterball/Version_BuiltIn/WaterballCast/Materials/SplashDropletsMat.mat
+  uploadId: 699399
