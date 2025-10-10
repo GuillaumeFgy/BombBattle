@@ -61,7 +61,7 @@ MonoBehaviour:
       - rid: 8725252959847317509
       - rid: 8725252959847317510
       - rid: 8725252959847317511
-      - rid: 3728141799607238656
+      - rid: 1182294098469978112
     m_RuntimeSettings:
       m_List:
       - rid: 6852985685364965378
@@ -108,7 +108,7 @@ MonoBehaviour:
   references:
     version: 2
     RefIds:
-    - rid: 3728141799607238656
+    - rid: 1182294098469978112
       type: {class: RenderingDebuggerRuntimeResources, ns: UnityEngine.Rendering, asm: Unity.RenderPipelines.Core.Runtime}
       data:
         m_version: 0
