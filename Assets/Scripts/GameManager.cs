@@ -243,7 +243,7 @@ public class GameManager : NetworkBehaviour
         }
         else if (aliveCount == 0)
         {
-            // No one survived — restart the round without awarding points
+            // No one survived ï¿½ restart the round without awarding points
             roundResetting = true;
             StartCoroutine(HandleRoundEnd(ulong.MaxValue)); // Pass invalid ID to indicate no winner
         }
@@ -282,6 +282,19 @@ public class GameManager : NetworkBehaviour
         foreach (Bomb bomb in bombs)
         {
             bomb.DestroyBombRpc();
+        }
+
+        // Reset all ability state and destroy teleporters between rounds
+        foreach (var client in NetworkManager.Singleton.ConnectedClientsList)
+        {
+            var obj = client.PlayerObject;
+            if (obj == null) continue;
+
+            if (obj.TryGetComponent(out PlayerClass pc))
+            {
+                pc.ServerClearTeleporter();
+                pc.ResetAbilityStateClientRpc();
+            }
         }
 
         roundResetting = false; // Allow future rounds to reset
@@ -378,18 +391,7 @@ public class GameManager : NetworkBehaviour
         // Reset scoreboard
         ScoreboardManager.Instance.ResetAllScoresServerRpc();
 
-        // Destroy all Caravel teleporters
-        var teleporters = GameObject.FindObjectsOfType<CaravelTeleporter>();
-        foreach (var tele in teleporters)
-        {
-            if (tele.IsServer && tele.NetworkObject.IsSpawned)
-            {
-                tele.NetworkObject.Despawn();
-                Destroy(tele.gameObject);
-            }
-        }
-
-        // Clear teleporter references on all players
+        // Clear all ability state and teleporters on all players
         foreach (var client in NetworkManager.Singleton.ConnectedClientsList)
         {
             var obj = client.PlayerObject;
@@ -397,7 +399,8 @@ public class GameManager : NetworkBehaviour
 
             if (obj.TryGetComponent(out PlayerClass pc))
             {
-                pc.ClearTeleporterClientRpc();
+                pc.ServerClearTeleporter();
+                pc.ResetAbilityStateClientRpc();
             }
 
             var spawn = GetSpawnPoint(connectedPlayers.IndexOf(client.ClientId));

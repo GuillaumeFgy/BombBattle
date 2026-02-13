@@ -341,7 +341,8 @@ public class PlayerClass : NetworkBehaviour
     [ServerRpc]
     private void TeleportAndDestroyServerRpc(Vector3 targetPos, NetworkObjectReference toDestroy)
     {
-        TeleportClientRpc(targetPos); // Notify owner/client
+        transform.position = targetPos; // Move on server (authoritative)
+        TeleportClientRpc(targetPos); // Sync to owning client
 
         if (toDestroy.TryGet(out NetworkObject netObj) && netObj.IsSpawned)
         {
@@ -359,17 +360,6 @@ public class PlayerClass : NetworkBehaviour
         transform.position = targetPos;
     }
 
-    [ServerRpc]
-    private void DestroyTeleporterServerRpc()
-    {
-        if (teleporterRef.Value.TryGet(out NetworkObject netObj))
-        {
-            netObj.Despawn();
-            Destroy(netObj.gameObject);
-            teleporterRef.Value = default;
-        }
-    }
-
     private IEnumerator CaravelCooldownRoutine()
     {
         isCaravelOnCooldown = true;
@@ -380,18 +370,52 @@ public class PlayerClass : NetworkBehaviour
         isCaravelOnCooldown = false;
     }
 
-    [ClientRpc]
-    public void ClearTeleporterClientRpc()
+    /// <summary>
+    /// Called from the server to destroy any active teleporter and clear the ref.
+    /// </summary>
+    public void ServerClearTeleporter()
     {
-        RequestClearTeleporterServerRpc();
-        hasTeleporterPlaced = false;
-        isCaravelOnCooldown = false;
+        if (!IsServer) return;
+
+        if (teleporterRef.Value.TryGet(out NetworkObject netObj) && netObj.IsSpawned)
+        {
+            netObj.Despawn();
+            Destroy(netObj.gameObject);
+        }
+        teleporterRef.Value = default;
     }
 
-    [ServerRpc(RequireOwnership = false)]
-    private void RequestClearTeleporterServerRpc()
+    /// <summary>
+    /// Resets all ability cooldowns and state. Called on both server and clients via ClientRpc.
+    /// Server should call ServerClearTeleporter() before calling this.
+    /// </summary>
+    [ClientRpc]
+    public void ResetAbilityStateClientRpc()
     {
-        teleporterRef.Value = default;
+        StopAllCoroutines();
+
+        // Sprint
+        isSprintOnCooldown = false;
+        GetComponent<PlayerMovement>().SetSprintMultiplier(1f);
+
+        // Galleon
+        isBombOnCooldown = false;
+
+        // Sloop
+        isSloopOnCooldown = false;
+        PlayerMovement movement = GetComponent<PlayerMovement>();
+        if (movement != null)
+        {
+            movement.SetSpawnInterval(0.5f);
+        }
+
+        // Drakkar
+        isDrakkarWallActive = false;
+        isDrakkarWallOnCooldown = false;
+
+        // Caravel
+        hasTeleporterPlaced = false;
+        isCaravelOnCooldown = false;
     }
 
     public void SetPlayerColor(int index)
