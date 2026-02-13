@@ -251,11 +251,6 @@ public class GameManager : NetworkBehaviour
 
 
 
-    public IEnumerator DelayedCheckEndCondition()
-    {
-        yield return new WaitForSeconds(0.2f); // Give time for other deaths to register
-        CheckEndCondition();
-    }
 
 
     private IEnumerator HandleRoundEnd(ulong winnerId)

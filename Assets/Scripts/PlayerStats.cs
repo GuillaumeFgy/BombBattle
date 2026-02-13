@@ -14,8 +14,8 @@ public struct PlayerStats : INetworkSerializable, IEquatable<PlayerStats>
         serializer.SerializeValue(ref score);
     }
 
-    public bool Equals(PlayerStats other) 
+    public bool Equals(PlayerStats other)
     {
-        return playerId == other.playerId;
+        return playerId == other.playerId && score == other.score;
     }
 }

@@ -12,9 +12,9 @@ public class PlayerDeathHandler : NetworkBehaviour
     [ServerRpc(RequireOwnership = false)]
     public void HandleDeathServerRpc(ServerRpcParams rpcParams = default)
     {
-        isAlive.Value = false; 
+        isAlive.Value = false;
         HideModelAndDisableClientRpc();
-        GameManager.Instance.StartCoroutine(GameManager.Instance.DelayedCheckEndCondition());
+        GameManager.Instance.CheckEndCondition();
     }
 
 
