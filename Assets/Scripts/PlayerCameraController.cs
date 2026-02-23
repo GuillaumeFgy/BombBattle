@@ -35,6 +35,11 @@ public class PlayerCameraController : NetworkBehaviour
 
             if (audioListener != null)
                 audioListener.enabled = true;
+
+            // Disable the menu camera so it doesn't conflict with the player camera
+            GameObject menuCamObj = GameObject.Find("MenuCamera");
+            if (menuCamObj != null)
+                menuCamObj.SetActive(false);
         }
     }
 
