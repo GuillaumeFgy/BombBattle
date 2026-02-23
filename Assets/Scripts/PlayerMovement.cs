@@ -16,6 +16,9 @@ public class PlayerMovement : NetworkBehaviour
 
     private float sprintMultiplier = 1f;
 
+    private Vector3 _launchVelocity = Vector3.zero;
+    [SerializeField] private float launchDecay = 5f;
+
     public static bool AllowMovement = false;
 
     public override void OnNetworkSpawn()
@@ -44,6 +47,7 @@ public class PlayerMovement : NetworkBehaviour
         MoveForward();
         RotateTowardsMouse();
         SpawnBombs();
+        ApplyLaunch();
     }
 
     public void SetSprintMultiplier(float mult)
@@ -121,5 +125,19 @@ public class PlayerMovement : NetworkBehaviour
 
     public void SetMoveSpeed(float speed) => moveSpeed = speed;
     public float GetMoveSpeed() => moveSpeed;
+
+    private void ApplyLaunch()
+    {
+        if (_launchVelocity.sqrMagnitude < 0.01f) return;
+        transform.position += _launchVelocity * Time.fixedDeltaTime;
+        _launchVelocity = Vector3.Lerp(_launchVelocity, Vector3.zero, launchDecay * Time.fixedDeltaTime);
+    }
+
+    [ClientRpc]
+    public void ApplyKnockbackClientRpc(Vector3 direction, float force)
+    {
+        if (!IsOwner) return;
+        _launchVelocity = direction * force;
+    }
 
 }

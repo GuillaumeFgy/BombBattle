@@ -303,6 +303,7 @@ public class PlayerClass : NetworkBehaviour
     private void SpawnDrakkarWallServerRpc(Vector3 position, Quaternion rotation)
     {
         GameObject wall = Instantiate(drakkarWallPrefab, position, rotation);
+        wall.GetComponent<DrakkarWall>().SetCaster(OwnerClientId);
         wall.GetComponent<NetworkObject>().Spawn();
     }
 
@@ -393,6 +394,7 @@ public class PlayerClass : NetworkBehaviour
     public void ResetAbilityStateClientRpc()
     {
         StopAllCoroutines();
+        AbilityUI.Instance?.ResetCooldowns();
 
         // Sprint
         isSprintOnCooldown = false;

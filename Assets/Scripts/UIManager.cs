@@ -33,11 +33,14 @@ public class UIManager : MonoBehaviour
     [SerializeField] private Texture sloopIcon;
     private AbilityUI abilityUI;
 
+    [SerializeField] private MenuBoatAmbience menuBoatAmbience;
+
 
     private void Start()
     {
         hostButton.onClick.AddListener(Host);
         joinButton.onClick.AddListener(Join);
+        AudioManager.Instance.PlayMusic(MusicTrackId.MainMenu);
 
         StartCoroutine(WaitForLocalPlayerClass());
 
@@ -47,6 +50,7 @@ public class UIManager : MonoBehaviour
             shipButtons[i].onClick.AddListener(() => OnShipSelected(index));
         }
         abilityUI = AbilityUI.Instance;
+        abilityUI?.SetVisible(false);
     }
 
     private IEnumerator WaitForLocalPlayerClass()
@@ -89,12 +93,16 @@ public class UIManager : MonoBehaviour
     {
         lobbyPanel.SetActive(false);
         gameInfoText.gameObject.SetActive(true);
+        menuBoatAmbience?.SetVisible(false);
+        abilityUI?.SetVisible(true);
     }
 
-    public void ShowLobby() 
+    public void ShowLobby()
     {
         lobbyPanel.SetActive(true);
         gameInfoText.gameObject.SetActive(false);
+        menuBoatAmbience?.SetVisible(true);
+        abilityUI?.SetVisible(false);
     }
 
 

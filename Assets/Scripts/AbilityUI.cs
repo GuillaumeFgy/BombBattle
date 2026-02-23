@@ -52,4 +52,21 @@ public class AbilityUI : MonoBehaviour
         icons[index].texture = icon;
     }
 
+    public void ResetCooldowns()
+    {
+        for (int i = 0; i < cooldownRoutines.Length; i++)
+        {
+            if (cooldownRoutines[i] != null)
+            {
+                StopCoroutine(cooldownRoutines[i]);
+                cooldownRoutines[i] = null;
+            }
+
+            if (i < cooldownImages.Length && cooldownImages[i] != null)
+                cooldownImages[i].fillAmount = 0f;
+        }
+    }
+
+    public void SetVisible(bool visible) => gameObject.SetActive(visible);
+
 }

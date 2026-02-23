@@ -5,8 +5,12 @@ public class DrakkarWall : NetworkBehaviour
 {
     public float speed = 10f;
     public float lifetime = 3f;
+    public float pushForce = 25f;
 
     private Rigidbody rb;
+    private ulong _casterClientId;
+
+    public void SetCaster(ulong clientId) => _casterClientId = clientId;
 
     private void Start()
     {
@@ -35,6 +39,13 @@ public class DrakkarWall : NetworkBehaviour
             if (other.TryGetComponent(out NetworkObject netObj) && netObj.IsSpawned)
             {
                 netObj.Despawn();
+            }
+        }
+        else if (other.TryGetComponent(out PlayerMovement movement))
+        {
+            if (movement.OwnerClientId != _casterClientId)
+            {
+                movement.ApplyKnockbackClientRpc(transform.forward, pushForce);
             }
         }
     }
