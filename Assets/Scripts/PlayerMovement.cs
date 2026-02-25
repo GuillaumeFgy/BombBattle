@@ -15,6 +15,7 @@ public class PlayerMovement : NetworkBehaviour
     private float bombTimer = 0f;
 
     private float sprintMultiplier = 1f;
+    public bool IsInputLocked = false;
 
     private Vector3 _launchVelocity = Vector3.zero;
     [SerializeField] private float launchDecay = 5f;
@@ -42,7 +43,7 @@ public class PlayerMovement : NetworkBehaviour
 
     void FixedUpdate()
     {
-        if (!IsOwner || !AllowMovement) return;
+        if (!IsOwner || !AllowMovement || IsInputLocked) return;
 
         MoveForward();
         RotateTowardsMouse();
@@ -138,6 +139,69 @@ public class PlayerMovement : NetworkBehaviour
     {
         if (!IsOwner) return;
         _launchVelocity = direction * force;
+    }
+
+    // ── Sloop speed boost (owner-side only) ──────────────────────────────────
+
+    private float _originalMoveSpeedBeforeSloop;
+    private bool _sloopAffected = false;
+    private Coroutine _sloopRestoreCoroutine;
+
+    // Called by the aura when this player enters it.
+    // Applies the boost once and cancels any pending restore timer.
+    [ClientRpc]
+    public void StartSloopSpeedBoostClientRpc(float boostMultiplier)
+    {
+        if (!IsOwner) return;
+        if (!_sloopAffected)
+        {
+            _originalMoveSpeedBeforeSloop = moveSpeed;
+            moveSpeed *= boostMultiplier;
+            _sloopAffected = true;
+        }
+        // Player re-entered the aura before the restore fired — cancel it
+        if (_sloopRestoreCoroutine != null)
+        {
+            StopCoroutine(_sloopRestoreCoroutine);
+            _sloopRestoreCoroutine = null;
+        }
+    }
+
+    // Called by the aura when this player exits it (or the aura despawns).
+    // Starts the countdown to restore base speed.
+    [ClientRpc]
+    public void BeginSloopSpeedRestoreClientRpc(float delay)
+    {
+        if (!IsOwner) return;
+        if (_sloopRestoreCoroutine != null)
+            StopCoroutine(_sloopRestoreCoroutine);
+        _sloopRestoreCoroutine = StartCoroutine(RestoreSloopSpeedRoutine(delay));
+    }
+
+    // Called on reset/death to immediately cancel the effect.
+    public void CancelSloopEffect()
+    {
+        if (_sloopRestoreCoroutine != null)
+        {
+            StopCoroutine(_sloopRestoreCoroutine);
+            _sloopRestoreCoroutine = null;
+        }
+        if (_sloopAffected)
+        {
+            moveSpeed = _originalMoveSpeedBeforeSloop;
+            _sloopAffected = false;
+        }
+    }
+
+    private IEnumerator RestoreSloopSpeedRoutine(float delay)
+    {
+        yield return new WaitForSeconds(delay);
+        if (_sloopAffected)
+        {
+            moveSpeed = _originalMoveSpeedBeforeSloop;
+            _sloopAffected = false;
+        }
+        _sloopRestoreCoroutine = null;
     }
 
 }

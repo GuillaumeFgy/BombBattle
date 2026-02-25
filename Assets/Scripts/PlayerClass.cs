@@ -50,6 +50,13 @@ public class PlayerClass : NetworkBehaviour
     private bool hasTeleporterPlaced = false;
     private bool isCaravelOnCooldown = false;
     private float caravelCooldown = 30f;
+    [SerializeField] private float anchorSpawnHeight = 2f;
+    [SerializeField] private float slideSpeed = 30f;
+    [SerializeField] private float slideRotationSpeed = 360f;
+    private float invincibilityPostDelay = 1f;
+    public NetworkVariable<bool> isInvincible = new(false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+    private MaterialPropertyBlock _propBlock;
+    private Renderer[] _caravelRenderers;
 
     public override void OnNetworkSpawn()
     {
@@ -309,7 +316,7 @@ public class PlayerClass : NetworkBehaviour
 
     private void PlaceTeleporter()
     {
-        Vector3 pos = transform.position;
+        Vector3 pos = transform.position + Vector3.up * anchorSpawnHeight;
         Quaternion rot = Quaternion.identity;
 
         SpawnTeleporterServerRpc(pos, rot);
@@ -330,35 +337,105 @@ public class PlayerClass : NetworkBehaviour
     {
         if (!teleporterRef.Value.TryGet(out NetworkObject netObj))
         {
-            Debug.LogWarning($"[Client {OwnerClientId}] Tried to teleport but teleporterRef was unresolved.");
+            Debug.LogWarning($"[Client {OwnerClientId}] Tried to slide but teleporterRef was unresolved.");
             return;
         }
 
-        Vector3 target = netObj.transform.position;
-        TeleportAndDestroyServerRpc(target, teleporterRef.Value);
+        Vector3 anchorPos = netObj.transform.position;
+        Vector3 target = new Vector3(anchorPos.x, transform.position.y, anchorPos.z);
+
+        // Lock input and run local slide for smooth visuals on the owner
+        GetComponent<PlayerMovement>().IsInputLocked = true;
+        StartCoroutine(SlideToTargetClientRoutine(target));
+
+        // Server handles authoritative movement, bomb destruction, and invincibility
+        StartSlideServerRpc(target, teleporterRef.Value);
         StartCoroutine(CaravelCooldownRoutine());
     }
 
     [ServerRpc]
-    private void TeleportAndDestroyServerRpc(Vector3 targetPos, NetworkObjectReference toDestroy)
+    private void StartSlideServerRpc(Vector3 targetPos, NetworkObjectReference anchorRef)
     {
-        transform.position = targetPos; // Move on server (authoritative)
-        TeleportClientRpc(targetPos); // Sync to owning client
-
-        if (toDestroy.TryGet(out NetworkObject netObj) && netObj.IsSpawned)
+        if (anchorRef.TryGet(out NetworkObject anchorNet) && anchorNet.IsSpawned)
         {
-            netObj.Despawn();
-            Destroy(netObj.gameObject);
+            anchorNet.Despawn();
+            Destroy(anchorNet.gameObject);
         }
-
         teleporterRef.Value = default;
+
+        isInvincible.Value = true;
+        SetInvincibleVisualClientRpc(true);
+        StartCoroutine(SlideToTargetServerRoutine(targetPos));
+    }
+
+    private IEnumerator SlideToTargetServerRoutine(Vector3 targetPos)
+    {
+        float threshold = 0.3f;
+        while (Vector3.Distance(transform.position, targetPos) > threshold)
+        {
+            Vector3 dir = (targetPos - transform.position).normalized;
+            Quaternion targetRot = Quaternion.LookRotation(dir);
+            transform.rotation = Quaternion.RotateTowards(transform.rotation, targetRot, slideRotationSpeed * Time.deltaTime);
+            transform.position = Vector3.MoveTowards(transform.position, targetPos, slideSpeed * Time.deltaTime);
+            yield return null;
+        }
+        transform.position = targetPos;
+        SnapClientToPositionClientRpc(targetPos);
+        SlideEndClientRpc();
+
+        yield return new WaitForSeconds(invincibilityPostDelay);
+
+        isInvincible.Value = false;
+        SetInvincibleVisualClientRpc(false);
+    }
+
+    private IEnumerator SlideToTargetClientRoutine(Vector3 targetPos)
+    {
+        float threshold = 0.3f;
+        while (Vector3.Distance(transform.position, targetPos) > threshold)
+        {
+            Vector3 dir = (targetPos - transform.position).normalized;
+            Quaternion targetRot = Quaternion.LookRotation(dir);
+            transform.rotation = Quaternion.RotateTowards(transform.rotation, targetRot, slideRotationSpeed * Time.deltaTime);
+            transform.position = Vector3.MoveTowards(transform.position, targetPos, slideSpeed * Time.deltaTime);
+            yield return null;
+        }
     }
 
     [ClientRpc]
-    private void TeleportClientRpc(Vector3 targetPos)
+    private void SnapClientToPositionClientRpc(Vector3 targetPos)
     {
         if (!IsOwner) return;
         transform.position = targetPos;
+    }
+
+    [ClientRpc]
+    private void SetInvincibleVisualClientRpc(bool active)
+    {
+        ApplyWhiteTint(active);
+    }
+
+    [ClientRpc]
+    private void SlideEndClientRpc()
+    {
+        if (!IsOwner) return;
+        GetComponent<PlayerMovement>().IsInputLocked = false;
+    }
+
+    private void ApplyWhiteTint(bool active)
+    {
+        if (_propBlock == null) _propBlock = new MaterialPropertyBlock();
+        if (_caravelRenderers == null) _caravelRenderers = Caravel.GetComponentsInChildren<Renderer>();
+
+        foreach (var r in _caravelRenderers)
+        {
+            r.GetPropertyBlock(_propBlock);
+            if (active)
+                _propBlock.SetColor("_BaseColor", Color.white);
+            else
+                _propBlock.Clear();
+            r.SetPropertyBlock(_propBlock);
+        }
     }
 
     private IEnumerator CaravelCooldownRoutine()
@@ -409,6 +486,7 @@ public class PlayerClass : NetworkBehaviour
         if (movement != null)
         {
             movement.SetSpawnInterval(0.5f);
+            if (IsOwner) movement.CancelSloopEffect();
         }
 
         // Drakkar
@@ -418,6 +496,9 @@ public class PlayerClass : NetworkBehaviour
         // Caravel
         hasTeleporterPlaced = false;
         isCaravelOnCooldown = false;
+        if (IsServer) isInvincible.Value = false;
+        GetComponent<PlayerMovement>().IsInputLocked = false;
+        ApplyWhiteTint(false);
     }
 
     public void SetPlayerColor(int index)

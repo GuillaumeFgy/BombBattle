@@ -4,18 +4,19 @@ using UnityEngine;
 
 public class SloopAura : NetworkBehaviour
 {
-    private Transform sloopTransform;
+    [SerializeField] private float boostMultiplier = 1.5f;
+    [SerializeField] private float effectDuration = 3f;
 
+    private Transform sloopTransform;
     private NetworkVariable<NetworkObjectReference> sloopRef = new();
 
-    private Dictionary<PlayerMovement, float> affectedPlayers = new();
+    // Players currently inside the aura (server-side)
+    private HashSet<PlayerMovement> _playersInAura = new();
 
     public void Initialize(NetworkObject sloopNetObj)
     {
         if (IsServer)
-        {
             sloopRef.Value = sloopNetObj;
-        }
     }
 
     public override void OnNetworkSpawn()
@@ -26,23 +27,18 @@ public class SloopAura : NetworkBehaviour
     private void TryResolveSloopTransform()
     {
         if (sloopRef.Value.TryGet(out var sloopNetObj))
-        {
             sloopTransform = sloopNetObj.transform;
-        }
         else
-        {
-            Debug.LogWarning($"[Aura] Failed to resolve Sloop NetworkObjectReference on client {NetworkManager.Singleton.LocalClientId}");
-        }
+            Debug.LogWarning($"[Aura] Failed to resolve Sloop ref on client {NetworkManager.Singleton.LocalClientId}");
     }
 
     private void FixedUpdate()
     {
         if (sloopTransform == null)
         {
-            TryResolveSloopTransform(); // Try again if not yet resolved
+            TryResolveSloopTransform();
             return;
         }
-
         transform.position = sloopTransform.position;
         transform.rotation = sloopTransform.rotation;
     }
@@ -50,28 +46,20 @@ public class SloopAura : NetworkBehaviour
     private void OnTriggerEnter(Collider other)
     {
         if (!IsServer) return;
+        if (!IsOtherPlayer(other, out PlayerMovement pm)) return;
 
-        if (other.CompareTag("Player") &&
-            other.TryGetComponent(out NetworkObject netObj) &&
-            sloopRef.Value.TryGet(out var sloopNetObj) &&
-            netObj.OwnerClientId != sloopNetObj.OwnerClientId)
-        {
-            if (other.TryGetComponent(out PlayerMovement targetMovement) &&
-                !affectedPlayers.ContainsKey(targetMovement))
-            {
-                affectedPlayers[targetMovement] = targetMovement.GetMoveSpeed();
-                targetMovement.SetMoveSpeed(targetMovement.GetMoveSpeed() * 0.5f);
-            }
-        }
+        _playersInAura.Add(pm);
+        // Apply boost and cancel any pending restore timer on the owner client
+        pm.StartSloopSpeedBoostClientRpc(boostMultiplier);
     }
 
     private void OnTriggerExit(Collider other)
     {
         if (!IsServer) return;
-
-        if (other.TryGetComponent(out PlayerMovement targetMovement))
+        if (other.TryGetComponent(out PlayerMovement pm) && _playersInAura.Remove(pm))
         {
-            RestoreSpeed(targetMovement);
+            // Start the post-aura countdown on the owner client
+            pm.BeginSloopSpeedRestoreClientRpc(effectDuration);
         }
     }
 
@@ -79,37 +67,24 @@ public class SloopAura : NetworkBehaviour
     {
         if (IsServer)
         {
-            RestoreAllSpeeds();
+            // Players still inside when the aura ends get the same post-aura countdown
+            foreach (var pm in _playersInAura)
+            {
+                if (pm != null)
+                    pm.BeginSloopSpeedRestoreClientRpc(effectDuration);
+            }
+            _playersInAura.Clear();
         }
         base.OnNetworkDespawn();
     }
 
-    private void OnDestroy()
+    private bool IsOtherPlayer(Collider other, out PlayerMovement pm)
     {
-        if (IsServer)
-        {
-            RestoreAllSpeeds();
-        }
-    }
-
-    private void RestoreSpeed(PlayerMovement player)
-    {
-        if (affectedPlayers.TryGetValue(player, out float originalSpeed))
-        {
-            player.SetMoveSpeed(originalSpeed);
-            affectedPlayers.Remove(player);
-        }
-    }
-
-    private void RestoreAllSpeeds()
-    {
-        foreach (var kvp in affectedPlayers)
-        {
-            if (kvp.Key != null)
-            {
-                kvp.Key.SetMoveSpeed(kvp.Value);
-            }
-        }
-        affectedPlayers.Clear();
+        pm = null;
+        if (!other.CompareTag("Player")) return false;
+        if (!other.TryGetComponent(out NetworkObject netObj)) return false;
+        if (!sloopRef.Value.TryGet(out var sloopNetObj)) return false;
+        if (netObj.OwnerClientId == sloopNetObj.OwnerClientId) return false;
+        return other.TryGetComponent(out pm);
     }
 }

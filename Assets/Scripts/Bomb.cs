@@ -56,6 +56,14 @@ public class Bomb : NetworkBehaviour
         if (other.CompareTag("Player") &&
             other.TryGetComponent(out NetworkObject netObj))
         {
+            // Invincible player (Caravel slide): destroy the bomb with its death effect
+            if (other.TryGetComponent(out PlayerClass playerClass) && playerClass.isInvincible.Value)
+            {
+                SpawnDeathEffect(transform.position);
+                GetComponent<NetworkObject>().Despawn(true);
+                return;
+            }
+
             if (ignoreCreator && netObj.OwnerClientId == creatorId)
             {
                 Debug.Log("Galleon bomb ignored its creator");
