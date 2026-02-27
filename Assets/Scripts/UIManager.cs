@@ -106,6 +106,7 @@ public class UIManager : MonoBehaviour
     }
 
 
+
     void AssignPlayerClass()
     {
         var localPlayer = NetworkManager.Singleton.LocalClient?.PlayerObject;

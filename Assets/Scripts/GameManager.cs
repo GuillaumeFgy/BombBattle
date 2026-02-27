@@ -40,6 +40,14 @@ public class GameManager : NetworkBehaviour
         NetworkManager.Singleton.OnClientConnectedCallback += OnPlayerJoined;
         startButton.onClick.AddListener(StartGame);
     }
+
+    public override void OnNetworkSpawn()
+    {
+        if (IsHost)
+        {
+            startButton.gameObject.SetActive(true);
+        }
+    }
     private void OnPlayerJoined(ulong clientId)
     {
         if (!IsServer) return;
