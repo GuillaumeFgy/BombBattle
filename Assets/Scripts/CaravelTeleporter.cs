@@ -42,13 +42,8 @@ public class CaravelTeleporter : NetworkBehaviour
         Collider[] hits = Physics.OverlapSphere(_basePosition, bombClearRadius);
         foreach (var hit in hits)
         {
-            if (hit.CompareTag("Bomb"))
-            {
-                if (hit.TryGetComponent(out NetworkObject netObj) && netObj.IsSpawned)
-                    netObj.Despawn();
-
-                Destroy(hit.gameObject);
-            }
+            if (hit.CompareTag("Bomb") && hit.TryGetComponent(out Bomb bomb))
+                bomb.ServerDestroy();
         }
     }
 }

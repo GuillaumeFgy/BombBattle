@@ -21,6 +21,20 @@ public class GameManager : NetworkBehaviour
 
     private bool roundResetting = false;
 
+    [Tooltip("Seconds after a round starts during which bombs can't sink anyone.")]
+    [SerializeField] private float spawnProtectionDuration = 1.5f;
+
+    // Network-clock time (NetworkManager.ServerTime) when round-start protection ends, identical on every machine.
+    private readonly NetworkVariable<double> spawnProtectionEndTime = new(0d, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+
+    public bool IsSpawnProtected => IsSpawned && NetworkManager.ServerTime.Time < spawnProtectionEndTime.Value;
+
+    /// <summary>
+    /// Server only: a round is being played (not the lobby, the countdown, or the gap after a round ended).
+    /// Outside of it the host refuses kills, trail bombs and abilities, so nothing from one round leaks into the next.
+    /// </summary>
+    public bool IsRoundLive => IsServer && gameActive && !roundResetting;
+
     private readonly List<Color> availableColors = new()
     {
         Color.red, Color.blue, Color.green, Color.yellow,
@@ -47,6 +61,14 @@ public class GameManager : NetworkBehaviour
         {
             startButton.gameObject.SetActive(true);
         }
+
+        // Clients (the host included) that connected before this object spawned were ignored by OnPlayerJoined
+        // (IsServer was still false), so they would never be moved or respawned between rounds.
+        if (IsServer)
+        {
+            foreach (ulong clientId in NetworkManager.ConnectedClientsIds)
+                OnPlayerJoined(clientId);
+        }
     }
     private void OnPlayerJoined(ulong clientId)
     {
@@ -65,7 +87,7 @@ public class GameManager : NetworkBehaviour
                 startButton.gameObject.SetActive(true);
             }
         }
-        else if (connectedPlayers.Count >= MaxPlayers)
+        else if (!connectedPlayers.Contains(clientId))
         {
             NetworkManager.Singleton.DisconnectClient(clientId);
         }
@@ -171,19 +193,17 @@ public class GameManager : NetworkBehaviour
         }
 
         HideLobbyRpc();
-        SetGameStateRpc(true, false);
+        ServerClearRoundObjects();
+        SetGameState(true, false);
+        StartSpawnProtection();
         EnablePlayerMovementRpc();
     }
 
 
     private void EndGame()
     {
-        SetGameStateRpc(false, true); 
-        Bomb[] bombs = FindObjectsByType<Bomb>(FindObjectsSortMode.None);
-        foreach (Bomb bomb in bombs)
-        {
-            bomb.DestroyBombRpc();
-        }
+        SetGameState(false, true);
+        ServerClearRoundObjects();
 
         UpdateWinnerRpc();
         StartCoroutine(ReturnToLobby());
@@ -224,7 +244,32 @@ public class GameManager : NetworkBehaviour
         return gameActive;
     }
 
+    [Tooltip("Deaths this close together count as simultaneous: if they sink the last ships, the round is a draw.")]
+    [SerializeField] private float drawWindow = 0.15f;
+
+    private bool endCheckRequested;
+    private float endCheckTime;
+
+    /// <summary>
+    /// Server only. Requests a round-end check <see cref="drawWindow"/> seconds after the first death, once every
+    /// near-simultaneous death is in: if the last ships sink together, nobody wins the round (draw) instead of the
+    /// first death handing the point to another ship that is sinking too.
+    /// </summary>
     public void CheckEndCondition()
+    {
+        if (!IsServer || endCheckRequested) return;
+        endCheckRequested = true;
+        endCheckTime = Time.time + drawWindow;
+    }
+
+    private void LateUpdate()
+    {
+        if (!endCheckRequested || Time.time < endCheckTime) return;
+        endCheckRequested = false;
+        EvaluateEndCondition();
+    }
+
+    private void EvaluateEndCondition()
     {
         if (!IsServer || roundResetting) return;
 
@@ -242,6 +287,8 @@ public class GameManager : NetworkBehaviour
                 lastAlivePlayerId = client.ClientId;
             }
         }
+
+        if (aliveCount <= 1) SetGameState(false, false); // round over: no more kills, bombs or abilities
 
         if (aliveCount == 1)
         {
@@ -281,11 +328,7 @@ public class GameManager : NetworkBehaviour
 
     void RestartRound()
     {
-        Bomb[] bombs = FindObjectsByType<Bomb>(FindObjectsSortMode.None);
-        foreach (Bomb bomb in bombs)
-        {
-            bomb.DestroyBombRpc();
-        }
+        ServerClearRoundObjects();
 
         // Reset all ability state and destroy teleporters between rounds
         foreach (var client in NetworkManager.Singleton.ConnectedClientsList)
@@ -347,8 +390,17 @@ public class GameManager : NetworkBehaviour
 
         UpdateLobbyTextRpc(""); // Clear message
 
-        SetGameStateRpc(true, false);
+        // Anything spawned by requests still in flight when the round ended.
+        ServerClearRoundObjects();
+
+        SetGameState(true, false);
+        StartSpawnProtection();
         EnablePlayerMovementRpc();
+    }
+
+    private void StartSpawnProtection()
+    {
+        spawnProtectionEndTime.Value = NetworkManager.ServerTime.Time + spawnProtectionDuration;
     }
 
     [Rpc(SendTo.ClientsAndHost)]
@@ -380,7 +432,7 @@ public class GameManager : NetworkBehaviour
             }
         }
 
-        SetGameStateRpc(false, true);
+        SetGameState(false, true);
         DisablePlayerMovementRpc(); // Prevent movement in lobby
         ShowLobbyRpc();
         ScoreboardManager.Instance.ResetAllScoresServerRpc();
@@ -424,6 +476,32 @@ public class GameManager : NetworkBehaviour
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// Server only: removes everything a round leaves on the sea (bombs, Sloop auras, Drakkar waves). Auras normally
+    /// despawn on a timer, but that timer runs on the ship and is cancelled by the ability reset.
+    /// </summary>
+    private void ServerClearRoundObjects()
+    {
+        if (!IsServer) return;
+
+        foreach (Bomb bomb in FindObjectsByType<Bomb>(FindObjectsSortMode.None))
+            bomb.ServerDestroy();
+
+        foreach (SloopAura aura in FindObjectsByType<SloopAura>(FindObjectsSortMode.None))
+            if (aura.IsSpawned) aura.NetworkObject.Despawn(true);
+
+        foreach (DrakkarWall wave in FindObjectsByType<DrakkarWall>(FindObjectsSortMode.None))
+            if (wave.IsSpawned) wave.NetworkObject.Despawn(true);
+    }
+
+    // Server: applies the state at once (kills, bombs and abilities are checked against it), then on every client.
+    private void SetGameState(bool isGameActive, bool isLobbyActive)
+    {
+        gameActive = isGameActive;
+        lobbyActive = isLobbyActive;
+        SetGameStateRpc(isGameActive, isLobbyActive);
     }
 
     [Rpc(SendTo.ClientsAndHost)]

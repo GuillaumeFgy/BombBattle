@@ -20,28 +20,40 @@ public class PlayerClass : NetworkBehaviour
     private NetworkVariable<ShipType> networkedSelectedShip = new(ShipType.Galleon, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
     private NetworkVariable<int> playerColorIndex = new(-1, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
-    // Sprint values
-    private float sprintMultiplier = 3f;
-    private float sprintDuration = 2f;
-    private float sprintCooldown = 15f;
+    [Header("Ship tuning (one ShipConfig per ship)")]
+    [SerializeField] private ShipConfig galleonConfig;
+    [SerializeField] private ShipConfig caravelConfig;
+    [SerializeField] private ShipConfig drakkarConfig;
+    [SerializeField] private ShipConfig sloopConfig;
+
+    /// <summary>Tuning of the currently selected ship (same on every machine: the selection is a NetworkVariable).</summary>
+    public ShipConfig Config => ConfigFor(networkedSelectedShip.Value);
+
+    private ShipConfig ConfigFor(ShipType ship)
+    {
+        ShipConfig config = ship switch
+        {
+            ShipType.Galleon => galleonConfig,
+            ShipType.Caravel => caravelConfig,
+            ShipType.Drakkar => drakkarConfig,
+            ShipType.Sloop => sloopConfig,
+            _ => null,
+        };
+        return config != null ? config : ShipConfig.Defaults;
+    }
+
     private bool isSprintOnCooldown = false;
 
-    // Galleon bomb values
-    private float bombCooldown = 30f;
+    // Galleon
     private bool isBombOnCooldown = false;
 
-    // Sloop ability: double spawn speed
+    // Sloop ability: bomb frenzy + speed aura for others
     [SerializeField] private GameObject sloopAuraPrefab;
-    private float sloopBoostDuration = 3f;
-    private float sloopBoostCooldown = 30f;
     private bool isSloopOnCooldown = false;
-    private float originalSpawnInterval;
-    private float increasedSpawnInterval = 3f;
 
     //drakkar
     [SerializeField] private GameObject drakkarWallPrefab;
     private bool isDrakkarWallActive = false;
-    private float drakkarWallCooldown = 30f;
     private bool isDrakkarWallOnCooldown = false;
 
     //caravel
@@ -49,14 +61,21 @@ public class PlayerClass : NetworkBehaviour
     private NetworkVariable<NetworkObjectReference> teleporterRef = new();
     private bool hasTeleporterPlaced = false;
     private bool isCaravelOnCooldown = false;
-    private float caravelCooldown = 30f;
-    [SerializeField] private float anchorSpawnHeight = 2f;
-    [SerializeField] private float slideSpeed = 30f;
-    [SerializeField] private float slideRotationSpeed = 360f;
-    private float invincibilityPostDelay = 1f;
     public NetworkVariable<bool> isInvincible = new(false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
     private MaterialPropertyBlock _propBlock;
     private Renderer[] _caravelRenderers;
+
+    private PlayerDeathHandler deathHandler;
+
+    private void Awake()
+    {
+        deathHandler = GetComponent<PlayerDeathHandler>();
+    }
+
+    private bool IsAlive => deathHandler == null || deathHandler.isAlive.Value;
+
+    // Server: abilities only work for a living ship during a live round (not dead, not in the countdown or lobby).
+    private bool ServerCanUseAbility() => GameManager.Instance.IsRoundLive && IsAlive;
 
     public override void OnNetworkSpawn()
     {
@@ -74,6 +93,8 @@ public class PlayerClass : NetworkBehaviour
 
     private void ApplyShipModel(ShipType ship)
     {
+        if (TryGetComponent(out PlayerMovement movement)) movement.ApplyConfig(ConfigFor(ship));
+
         Galleon.SetActive(false);
         Caravel.SetActive(false);
         Drakkar.SetActive(false);
@@ -126,7 +147,7 @@ public class PlayerClass : NetworkBehaviour
 
     private void Update()
     {
-        if (!IsOwner || !GameManager.Instance.IsGameActive()) return;
+        if (!IsOwner || !GameManager.Instance.IsGameActive() || !PlayerMovement.AllowMovement || !IsAlive) return;
 
         if (Input.GetKeyDown(KeyCode.Space) && !isSprintOnCooldown)
         {
@@ -172,37 +193,59 @@ public class PlayerClass : NetworkBehaviour
     private IEnumerator SprintRoutine()
     {
         isSprintOnCooldown = true;
-        AbilityUI.Instance.StartCooldown(0, sprintCooldown);
+        AbilityUI.Instance.StartCooldown(0, Config.sprintCooldown);
 
-        GetComponent<PlayerMovement>().SetSprintMultiplier(sprintMultiplier);
+        GetComponent<PlayerMovement>().SetSprintMultiplier(Config.sprintMultiplier);
+        ReportSprintRpc(); // applied locally right away (no input lag); the host checks the cooldown
 
-        yield return new WaitForSeconds(sprintDuration);
+        yield return new WaitForSeconds(Config.sprintDuration);
 
         GetComponent<PlayerMovement>().SetSprintMultiplier(1f);
 
-        yield return new WaitForSeconds(sprintCooldown - sprintDuration);
+        yield return new WaitForSeconds(Config.sprintCooldown - Config.sprintDuration);
 
         isSprintOnCooldown = false;
+    }
+
+    private double lastSprintGrantTime = double.NegativeInfinity; // server
+
+    [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Owner)]
+    private void ReportSprintRpc()
+    {
+        if (!ServerCanUseAbility()) return;
+
+        double now = Time.timeAsDouble;
+        // 1 s tolerance: the owner's cooldown and the host's don't start at exactly the same moment.
+        if (now - lastSprintGrantTime < Config.sprintCooldown - 1f)
+        {
+            Debug.LogWarning($"[Move] Client {OwnerClientId} sprinted while sprint is on cooldown; not allowed.");
+            return;
+        }
+        lastSprintGrantTime = now;
+        GetComponent<PlayerMovement>().ServerGrantSprint(Config.sprintMultiplier, Config.sprintDuration);
     }
 
     private IEnumerator GalleonBombRoutine()
     {
         isBombOnCooldown = true;
 
-        Vector3 spawnPos = transform.position + transform.forward * 5f + Vector3.up * 1f;
+        Vector3 spawnPos = transform.position + transform.forward * Config.shotSpawnDistance + Vector3.up * 1f;
         Quaternion rotation = transform.rotation;
 
         ShootBombServerRpc(spawnPos, rotation, OwnerClientId, true);
-        AbilityUI.Instance.StartCooldown(1, bombCooldown);
+        AbilityUI.Instance.StartCooldown(1, Config.abilityCooldown);
 
-        yield return new WaitForSeconds(bombCooldown);
+        yield return new WaitForSeconds(Config.abilityCooldown);
         isBombOnCooldown = false;
     }
 
     [ServerRpc]
     void ShootBombServerRpc(Vector3 position, Quaternion rotation, ulong creatorId, bool ignoreCreator)
     {
+        if (!ServerCanUseAbility()) return;
+
         GameObject bomb = Instantiate(bombPrefab, position, rotation);
+        bomb.GetComponent<Bomb>().DropperClientId = OwnerClientId;
         bomb.GetComponent<NetworkObject>().Spawn();
 
         Bomb bombScript = bomb.GetComponent<Bomb>();
@@ -218,7 +261,7 @@ public class PlayerClass : NetworkBehaviour
         Rigidbody rb = bomb.GetComponent<Rigidbody>();
         if (rb != null)
         {
-            rb.linearVelocity = transform.forward * 20f;
+            rb.linearVelocity = transform.forward * Config.shotSpeed;
         }
     }
 
@@ -234,36 +277,35 @@ public class PlayerClass : NetworkBehaviour
         PlayerMovement movement = GetComponent<PlayerMovement>();
 
         // Start cooldown in UI
-        AbilityUI.Instance.StartCooldown(1, sloopBoostCooldown);
+        AbilityUI.Instance.StartCooldown(1, Config.abilityCooldown);
 
-        // Save original spawn rate and apply boost
+        // Bomb frenzy: drop trail bombs faster
         if (movement != null)
         {
-            originalSpawnInterval = movement.GetSpawnInterval();
-            movement.SetSpawnInterval(originalSpawnInterval / increasedSpawnInterval);
+            movement.SetSpawnInterval(Config.bombInterval / Config.frenzyBombRateMultiplier);
         }
 
         // Tell server to spawn aura
         SpawnSloopAuraServerRpc();
 
         // Wait for duration of the boost
-        yield return new WaitForSeconds(sloopBoostDuration);
+        yield return new WaitForSeconds(Config.frenzyDuration);
 
         // Restore spawn interval
         if (movement != null)
         {
-            movement.SetSpawnInterval(originalSpawnInterval);
+            movement.SetSpawnInterval(Config.bombInterval);
         }
 
         // Wait remaining cooldown
-        yield return new WaitForSeconds(sloopBoostCooldown - sloopBoostDuration);
+        yield return new WaitForSeconds(Config.abilityCooldown - Config.frenzyDuration);
         isSloopOnCooldown = false;
     }
 
     [ServerRpc]
     private void SpawnSloopAuraServerRpc(ServerRpcParams rpcParams = default)
     {
-        if (sloopAuraPrefab == null) return;
+        if (sloopAuraPrefab == null || !ServerCanUseAbility()) return;
 
         GameObject auraInstance = Instantiate(sloopAuraPrefab, transform.position, transform.rotation);
         var netObj = auraInstance.GetComponent<NetworkObject>();
@@ -276,7 +318,7 @@ public class PlayerClass : NetworkBehaviour
                 auraScript.Initialize(GetComponent<NetworkObject>());
             }
 
-            StartCoroutine(DespawnAuraAfterDelay(netObj, sloopBoostDuration));
+            StartCoroutine(DespawnAuraAfterDelay(netObj, Config.frenzyDuration));
         }
     }
 
@@ -300,15 +342,17 @@ public class PlayerClass : NetworkBehaviour
         Quaternion wallRot = Quaternion.LookRotation(transform.forward);
 
         SpawnDrakkarWallServerRpc(wallPos, wallRot);
-        AbilityUI.Instance.StartCooldown(1, drakkarWallCooldown);
+        AbilityUI.Instance.StartCooldown(1, Config.abilityCooldown);
 
-        yield return new WaitForSeconds(drakkarWallCooldown);
+        yield return new WaitForSeconds(Config.abilityCooldown);
         isDrakkarWallOnCooldown = false;
     }
 
     [ServerRpc]
     private void SpawnDrakkarWallServerRpc(Vector3 position, Quaternion rotation)
     {
+        if (!ServerCanUseAbility()) return;
+
         GameObject wall = Instantiate(drakkarWallPrefab, position, rotation);
         wall.GetComponent<DrakkarWall>().SetCaster(OwnerClientId);
         wall.GetComponent<NetworkObject>().Spawn();
@@ -316,7 +360,7 @@ public class PlayerClass : NetworkBehaviour
 
     private void PlaceTeleporter()
     {
-        Vector3 pos = transform.position + Vector3.up * anchorSpawnHeight;
+        Vector3 pos = transform.position + Vector3.up * Config.anchorHeight;
         Quaternion rot = Quaternion.identity;
 
         SpawnTeleporterServerRpc(pos, rot);
@@ -326,6 +370,8 @@ public class PlayerClass : NetworkBehaviour
     [ServerRpc]
     private void SpawnTeleporterServerRpc(Vector3 position, Quaternion rotation)
     {
+        if (!ServerCanUseAbility()) return;
+
         GameObject obj = Instantiate(caravelTeleporterPrefab, position, rotation);
         var netObj = obj.GetComponent<NetworkObject>();
         netObj.SpawnWithOwnership(OwnerClientId);
@@ -344,82 +390,78 @@ public class PlayerClass : NetworkBehaviour
         Vector3 anchorPos = netObj.transform.position;
         Vector3 target = new Vector3(anchorPos.x, transform.position.y, anchorPos.z);
 
-        // Lock input and run local slide for smooth visuals on the owner
-        GetComponent<PlayerMovement>().IsInputLocked = true;
+        // Movement is owner-authoritative: the owner slides its own ship and gets its controls back on arrival.
         StartCoroutine(SlideToTargetClientRoutine(target));
 
-        // Server handles authoritative movement, bomb destruction, and invincibility
-        StartSlideServerRpc(target, teleporterRef.Value);
+        // The host removes the anchor and handles invincibility (and the bombs it smashes) for the slide's duration.
+        StartSlideServerRpc();
         StartCoroutine(CaravelCooldownRoutine());
     }
 
     [ServerRpc]
-    private void StartSlideServerRpc(Vector3 targetPos, NetworkObjectReference anchorRef)
+    private void StartSlideServerRpc()
     {
-        if (anchorRef.TryGet(out NetworkObject anchorNet) && anchorNet.IsSpawned)
+        if (!ServerCanUseAbility()) return;
+
+        float distance = 0f;
+        if (teleporterRef.Value.TryGet(out NetworkObject anchorNet) && anchorNet.IsSpawned)
         {
+            Vector3 a = anchorNet.transform.position;
+            distance = Vector3.Distance(transform.position, new Vector3(a.x, transform.position.y, a.z));
             anchorNet.Despawn();
-            Destroy(anchorNet.gameObject);
         }
         teleporterRef.Value = default;
 
         isInvincible.Value = true;
         SetInvincibleVisualClientRpc(true);
-        StartCoroutine(SlideToTargetServerRoutine(targetPos));
+        GetComponent<PlayerMovement>().ServerBeginSlide(Config.slideSpeed, Config.slideTurnSpeed);
+        StartCoroutine(SlideServerRoutine(distance));
     }
 
-    private IEnumerator SlideToTargetServerRoutine(Vector3 targetPos)
+    // Server: the slide's invincibility window. The host used to move the ship itself and only gave the owner its
+    // controls back once the host's copy reached the anchor, which could never happen: the owner's synced position
+    // kept overriding it, and the Caravel stayed frozen on the anchor.
+    private IEnumerator SlideServerRoutine(float distance)
     {
-        float threshold = 0.3f;
-        while (Vector3.Distance(transform.position, targetPos) > threshold)
-        {
-            Vector3 dir = (targetPos - transform.position).normalized;
-            Quaternion targetRot = Quaternion.LookRotation(dir);
-            transform.rotation = Quaternion.RotateTowards(transform.rotation, targetRot, slideRotationSpeed * Time.deltaTime);
-            transform.position = Vector3.MoveTowards(transform.position, targetPos, slideSpeed * Time.deltaTime);
-            yield return null;
-        }
-        transform.position = targetPos;
-        SnapClientToPositionClientRpc(targetPos);
-        SlideEndClientRpc();
+        yield return new WaitForSeconds(distance / Mathf.Max(Config.slideSpeed, 0.01f) + SlideEndSlack);
+        GetComponent<PlayerMovement>().ServerEndSlide();
 
-        yield return new WaitForSeconds(invincibilityPostDelay);
+        yield return new WaitForSeconds(Config.invincibilityAfterSlide);
 
         isInvincible.Value = false;
         SetInvincibleVisualClientRpc(false);
     }
 
+    // The host sees the owner's slide late (latency + interpolation); keep the slide allowance a bit longer.
+    private const float SlideEndSlack = 0.3f;
+
     private IEnumerator SlideToTargetClientRoutine(Vector3 targetPos)
     {
-        float threshold = 0.3f;
-        while (Vector3.Distance(transform.position, targetPos) > threshold)
+        PlayerMovement movement = GetComponent<PlayerMovement>();
+        movement.IsInputLocked = true;
+
+        // Safety net: controls always come back, even if something (a host snap-back) moved the ship mid-slide.
+        float maxDuration = Vector3.Distance(transform.position, targetPos) / Mathf.Max(Config.slideSpeed, 0.01f) + 1f;
+        float elapsed = 0f;
+
+        const float threshold = 0.3f;
+        while (Vector3.Distance(transform.position, targetPos) > threshold && elapsed < maxDuration)
         {
             Vector3 dir = (targetPos - transform.position).normalized;
             Quaternion targetRot = Quaternion.LookRotation(dir);
-            transform.rotation = Quaternion.RotateTowards(transform.rotation, targetRot, slideRotationSpeed * Time.deltaTime);
-            transform.position = Vector3.MoveTowards(transform.position, targetPos, slideSpeed * Time.deltaTime);
+            transform.rotation = Quaternion.RotateTowards(transform.rotation, targetRot, Config.slideTurnSpeed * Time.deltaTime);
+            transform.position = Vector3.MoveTowards(transform.position, targetPos, Config.slideSpeed * Time.deltaTime);
+            elapsed += Time.deltaTime;
             yield return null;
         }
-    }
 
-    [ClientRpc]
-    private void SnapClientToPositionClientRpc(Vector3 targetPos)
-    {
-        if (!IsOwner) return;
-        transform.position = targetPos;
+        movement.IsInputLocked = false;
     }
 
     [ClientRpc]
     private void SetInvincibleVisualClientRpc(bool active)
     {
         ApplyWhiteTint(active);
-    }
-
-    [ClientRpc]
-    private void SlideEndClientRpc()
-    {
-        if (!IsOwner) return;
-        GetComponent<PlayerMovement>().IsInputLocked = false;
     }
 
     private void ApplyWhiteTint(bool active)
@@ -442,8 +484,8 @@ public class PlayerClass : NetworkBehaviour
     {
         isCaravelOnCooldown = true;
         hasTeleporterPlaced = false;
-        AbilityUI.Instance.StartCooldown(1, caravelCooldown);
-        yield return new WaitForSeconds(caravelCooldown);
+        AbilityUI.Instance.StartCooldown(1, Config.abilityCooldown);
+        yield return new WaitForSeconds(Config.abilityCooldown);
 
         isCaravelOnCooldown = false;
     }
@@ -476,6 +518,11 @@ public class PlayerClass : NetworkBehaviour
         // Sprint
         isSprintOnCooldown = false;
         GetComponent<PlayerMovement>().SetSprintMultiplier(1f);
+        if (IsServer)
+        {
+            lastSprintGrantTime = double.NegativeInfinity;
+            GetComponent<PlayerMovement>().ServerResetAllowances();
+        }
 
         // Galleon
         isBombOnCooldown = false;
@@ -485,7 +532,7 @@ public class PlayerClass : NetworkBehaviour
         PlayerMovement movement = GetComponent<PlayerMovement>();
         if (movement != null)
         {
-            movement.SetSpawnInterval(0.5f);
+            movement.SetSpawnInterval(Config.bombInterval);
             if (IsOwner) movement.CancelSloopEffect();
         }
 

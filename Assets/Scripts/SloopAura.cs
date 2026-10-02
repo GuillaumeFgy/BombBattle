@@ -50,7 +50,7 @@ public class SloopAura : NetworkBehaviour
 
         _playersInAura.Add(pm);
         // Apply boost and cancel any pending restore timer on the owner client
-        pm.StartSloopSpeedBoostClientRpc(boostMultiplier);
+        pm.ServerStartSloopBoost(boostMultiplier);
     }
 
     private void OnTriggerExit(Collider other)
@@ -59,7 +59,7 @@ public class SloopAura : NetworkBehaviour
         if (other.TryGetComponent(out PlayerMovement pm) && _playersInAura.Remove(pm))
         {
             // Start the post-aura countdown on the owner client
-            pm.BeginSloopSpeedRestoreClientRpc(effectDuration);
+            pm.ServerBeginSloopRestore(effectDuration);
         }
     }
 
@@ -71,7 +71,7 @@ public class SloopAura : NetworkBehaviour
             foreach (var pm in _playersInAura)
             {
                 if (pm != null)
-                    pm.BeginSloopSpeedRestoreClientRpc(effectDuration);
+                    pm.ServerBeginSloopRestore(effectDuration);
             }
             _playersInAura.Clear();
         }

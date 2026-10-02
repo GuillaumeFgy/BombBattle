@@ -234,13 +234,18 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   ShowTopMostFoldoutHeaderGroup: 1
-  moveSpeed: 10
-  rotationSpeed: 1
   bombPrefab: {fileID: 6649712469465577651, guid: 94f13fa769ed3b84aa0202546f335cd3, type: 3}
   bombSpawnPos: {x: 0, y: 0, z: 0}
-  spawnInterval: 0.5
   IsInputLocked: 0
   launchDecay: 5
+  checkWindow: 0.5
+  checkInterval: 0.25
+  speedMargin: 0.3
+  distanceMargin: 3
+  turnMargin: 0.3
+  turnAngleMargin: 25
+  violationsBeforeSnap: 2
+  allowanceSlack: 0.5
 --- !u!54 &8027825242874135847
 Rigidbody:
   m_ObjectHideFlags: 0
@@ -345,6 +350,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   ShowTopMostFoldoutHeaderGroup: 1
   networkPlayerName:
+    UpdateTraits:
+      MinSecondsBetweenUpdates: 0
+      MaxSecondsBetweenUpdates: 0
     m_InternalValue:
       utf8LengthInBytes: 7
       bytes:
@@ -423,7 +431,16 @@ MonoBehaviour:
   componentsToDisable:
   - {fileID: 2650525504548306459}
   spectatorCameraPosition: {fileID: 0}
+  reportArmTolerance: 0.15
+  reportMaxDrift: 12
+  reportMaxGap: 0.75
+  fallbackDepth: 0.35
+  fallbackArmedMargin: 0.2
+  fallbackReportWait: 0.25
   isAlive:
+    UpdateTraits:
+      MinSecondsBetweenUpdates: 0
+      MaxSecondsBetweenUpdates: 0
     m_InternalValue: 1
 --- !u!114 &7423449673353953728
 MonoBehaviour:
@@ -443,12 +460,17 @@ MonoBehaviour:
   Drakkar: {fileID: 494803863165793165}
   Sloop: {fileID: 1821051202942977383}
   bombPrefab: {fileID: 6649712469465577651, guid: 94f13fa769ed3b84aa0202546f335cd3, type: 3}
+  galleonConfig: {fileID: 11400000, guid: 172c089bba21c3f489fb725d47a0bbdb, type: 2}
+  caravelConfig: {fileID: 11400000, guid: 447f44892d7686c47af79f43dcce68b7, type: 2}
+  drakkarConfig: {fileID: 11400000, guid: bd8766b5f0a66ab4db2dd3cdea7f2c59, type: 2}
+  sloopConfig: {fileID: 11400000, guid: 30efd1cf0c5077c40b86972019a1dac5, type: 2}
   sloopAuraPrefab: {fileID: 6900377968817428928, guid: 2e6e0925d0cd39d4193b76c52d7ad6bc, type: 3}
   drakkarWallPrefab: {fileID: 1733133464864641624, guid: 7c907e1cd02aa7948b973cec499357f7, type: 3}
   caravelTeleporterPrefab: {fileID: 1468120574015253637, guid: e970ecc62115f6142ba7612bd3018e2f, type: 3}
-  slideSpeed: 30
-  slideRotationSpeed: 360
   isInvincible:
+    UpdateTraits:
+      MinSecondsBetweenUpdates: 0
+      MaxSecondsBetweenUpdates: 0
     m_InternalValue: 0
 --- !u!1001 &728611910449221340
 PrefabInstance:

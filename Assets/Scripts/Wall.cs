@@ -5,20 +5,21 @@ public class Wall : MonoBehaviour
 {
     private void OnTriggerEnter(Collider other)
     {
+        var nm = NetworkManager.Singleton;
+        if (nm == null || !nm.IsListening) return;
+
         if (other.CompareTag("Player"))
         {
-            if (other.TryGetComponent(out PlayerDeathHandler deathHandler))
-            {
-                deathHandler.HandleDeathServerRpc();
-            }
+            if (!other.TryGetComponent(out PlayerDeathHandler deathHandler)) return;
+
+            if (nm.IsServer)
+                deathHandler.ServerKill();
+            else if (deathHandler.IsOwner)
+                deathHandler.ReportOwnWallHitRpc(); // our own ship hit the wall on our screen: report it right away
         }
-        else if (other.CompareTag("Bomb"))
+        else if (other.CompareTag("Bomb") && nm.IsServer && other.TryGetComponent(out Bomb bomb))
         {
-            if (other.TryGetComponent(out NetworkObject netObj) && netObj.IsSpawned)
-            {
-                netObj.Despawn();
-            }
-            Destroy(other.gameObject);
+            bomb.ServerDestroy();
         }
     }
 }

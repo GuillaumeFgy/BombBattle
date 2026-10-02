@@ -29,11 +29,18 @@ public class ScoreboardManager : NetworkBehaviour
         if (IsServer)
         {
             NetworkManager.Singleton.OnClientConnectedCallback += HandlePlayerConnected;
+
+            // Clients (the host included) that connected before this object spawned.
+            foreach (ulong clientId in NetworkManager.ConnectedClientsIds)
+                HandlePlayerConnected(clientId);
         }
     }
 
     private void HandlePlayerConnected(ulong playerId)
     {
+        foreach (var player in networkPlayerList)
+            if (player.playerId == playerId) return;
+
         PlayerStats newPlayer = new PlayerStats
         {
             playerId = playerId,
